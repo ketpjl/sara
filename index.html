@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comunicação sem Barreiras</title>
+
+<style>
+* { box-sizing:border-box; }
+body {
+  margin:0;
+  overflow:hidden;
+  font-family:Arial,sans-serif;
+  background:#87ceeb;
+}
+#game { width:100vw;height:100vh;display:block; }
+
+#hud {
+  position:absolute;
+  top:15px;left:15px;
+  color:white;
+  background:#102d3ddd;
+  padding:15px;
+  border-radius:15px;
+  z-index:2;
+}
+#hud h2 { margin:0 0 6px;color:#ffd76a; }
+#message {
+  position:absolute;
+  bottom:105px;
+  left:50%;
+  transform:translateX(-50%);
+  width:min(90%,420px);
+  text-align:center;
+  color:white;
+  background:#102d3deD;
+  padding:15px;
+  border-radius:15px;
+  z-index:3;
+}
+#controls {
+  position:absolute;
+  bottom:18px;left:0;right:0;
+  display:flex;
+  justify-content:space-between;
+  padding:0 25px;
+  z-index:4;
+  pointer-events:none;
+}
+.pad { display:grid;grid-template-columns:repeat(3,48px);gap:5px; }
+button {
+  border:0;border-radius:12px;
+  padding:12px;
+  font-size:18px;
+  font-weight:bold;
+  background:#ffffffdd;
+  color:#12354a;
+  cursor:pointer;
+  pointer-events:auto;
+}
+.pad button { height:48px; }
+#actions { display:flex;gap:8px;align-items:end; }
+#actions button { background:#f7c84b; }
+</style>
+</head>
+
+<body>
+
+<div id="hud">
+  <h2>🌴 COMUNICAÇÃO SEM BARREIRAS</h2>
+  <div>Personagem: Luna</div>
+  <div>Missão: Encontrar os amigos</div>
+  <div id="score">⭐ Medalhas: 0</div>
+</div>
+
+<div id="message">
+  👋 Olá! Eu sou Luna! Vamos explorar a ilha?
+  <br>Use as setas para andar e encontre seus amigos!
+</div>
+
+<div id="controls">
+  <div class="pad">
+    <span></span>
+    <button data-key="ArrowUp">▲</button>
+    <span></span>
+    <button data-key="ArrowLeft">◀</button>
+    <button data-key="ArrowDown">▼</button>
+    <button data-key="ArrowRight">▶</button>
+  </div>
+  <div id="actions">
+    <button id="jump">PULAR</button>
+    <button id="talk">CONVERSAR</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8bd8f5);
+scene.fog = new THREE.Fog(0x8bd8f5, 45, 130);
+
+const camera = new THREE.PerspectiveCamera(
+  65, innerWidth/innerHeight, 0.1, 300
+);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.prepend(renderer.domElement);
+renderer.domElement.id = "game";
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x537c4c,2));
+
+const sun = new THREE.DirectionalLight(0xffffff,3);
+sun.position.set(-30,50,25);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+scene.add(sun);
+
+// OCEANO
+const ocean = new THREE.Mesh(
+  new THREE.PlaneGeometry(300,300),
+  new THREE.MeshStandardMaterial({
+    color:0x159cc4,
+    roughness:0.25,
+    metalness:0.15
+  })
+);
+ocean.rotation.x=-Math.PI/2;
+ocean.position.y=-1.5;
+scene.add(ocean);
+
+// ILHA
+const island = new THREE.Mesh(
+  new THREE.CylinderGeometry(38,42,5,96),
+  new THREE.MeshStandardMaterial({
+    color:0xe6c68a,
+    roughness:0.9
+  })
+);
+island.position.y=-1;
+island.receiveShadow=true;
+scene.add(island);
+
+const grass = new THREE.Mesh(
+  new THREE.CircleGeometry(36,96),
+  new THREE.MeshStandardMaterial({color:0x4c963f})
+);
+grass.rotation.x=-Math.PI/2;
+grass.position.y=1.53;
+grass.receiveShadow=true;
+scene.add(grass);
+
+// MORROS
+function hill(x,z,sx,sy,sz,color) {
+  const m=new THREE.Mesh(
+    new THREE.SphereGeometry(1,32,24),
+    new THREE.MeshStandardMaterial({color,roughness:1})
+  );
+  m.position.set(x,1.5+sy/2,z);
+  m.scale.set(sx,sy,sz);
+  m.castShadow=true;
+  scene.add(m);
+}
+hill(-15,7,13,8,12,0x387b36);
+hill(17,-12,14,11,10,0x357c39);
+hill(0,-25,16,8,8,0x488c39);
+
+// ÁRVORES
+function tree(x,z,scale=1) {
+  const trunk=new THREE.Mesh(
+    new THREE.CylinderGeometry(.3,.5,4*scale,10),
+    new THREE.MeshStandardMaterial({color:0x79502e})
+  );
+  trunk.position.set(x,3.5*scale,z);
+  trunk.castShadow=true;
+  scene.add(trunk);
+
+  for(let i=0;i<4;i++){
+    const leaf=new THREE.Mesh(
+      new THREE.SphereGeometry(2.2*scale,16,16),
+      new THREE.MeshStandardMaterial({color:i%2?0x267b36:0x359b46})
+    );
+    const a=i*Math.PI/2;
+    leaf.position.set(
+      x+Math.cos(a)*1.2*scale,
+      5.2*scale,
+      z+Math.sin(a)*1.2*scale
+    );
+    leaf.castShadow=true;
+    scene.add(leaf);
+  }
+}
+for(let i=0;i<35;i++){
+  const a=i*2.399;
+  const r=23+(i%5)*1.5;
+  tree(Math.cos(a)*r,Math.sin(a)*r,0.8+(i%4)*.15);
+}
+
+// PERSONAGEM LUNA
+const luna=new THREE.Group();
+scene.add(luna);
+
+function part(parent,geo,color,x,y,z) {
+  const mesh=new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({color,roughness:.7})
+  );
+  mesh.position.set(x,y,z);
+  mesh.castShadow=true;
+  parent.add(mesh);
+  return mesh;
+}
+
+const skin=0x75432c;
+const hair=0x17110e;
+
+// Corpo e roupa
+part(luna,new THREE.CapsuleGeometry(.55,.9,8,16),
+  0x8e39c7,0,1.8,0);
+
+// Cabeça
+const head=new THREE.Group();
+head.position.set(0,3.15,0);
+luna.add(head);
+
+part(head,new THREE.SphereGeometry(.66,32,32),
+  skin,0,0,0);
+
+// Cabelo
+part(head,new THREE.SphereGeometry(.7,32,32),
+  hair,0,.22,-.12);
+
+// Franja
+part(head,new THREE.SphereGeometry(.45,24,16),
+  hair,0,.47,.2);
+
+// Olhos
+for(const x of [-.23,.23]){
+  part(head,new THREE.SphereGeometry(.07,16,16),
+    0xffffff,x,-.04,.59);
+  part(head,new THREE.SphereGeometry(.035,12,12),
+    0x17110e,x,-.04,.65);
+}
+
+// Sorriso
+const smile=part(head,new THREE.TorusGeometry(.17,.025,8,24,Math.PI),
+  0x3b1713,0,-.25,.58);
+smile.rotation.z=Math.PI;
+
+// Braços articulados
+const arms=[];
+for(const side of [-1,1]){
+  const pivot=new THREE.Group();
+  pivot.position.set(side*.65,2.3,0);
+  luna.add(pivot);
+
+  part(pivot,new THREE.CapsuleGeometry(.17,.65,6,12),
+    skin,0,-.48,0);
+  arms.push(pivot);
+}
+
+// Pernas
+const legs=[];
+for(const side of [-1,1]){
+  const leg=new THREE.Group();
+  leg.position.set(side*.25,1,0);
+  luna.add(leg);
+  part(leg,new THREE.CapsuleGeometry(.18,.65,6,12),
+    0x273d9a,0,-.35,0);
+  legs.push(leg);
+}
+
+// AMIGOS
+const friends=[];
+
+function friend(x,z,name,color){
+  const f=new THREE.Group();
+  f.position.set(x,1.5,z);
+  scene.add(f);
+
+  part(f,new THREE.CapsuleGeometry(.48,.85,8,16),
+    color,0,1,0);
+  part(f,new THREE.SphereGeometry(.53,24,24),
+    0x9b6748,0,2.25,0);
+
+  part(f,new THREE.SphereGeometry(.56,20,20),
+    0x24160f,0,2.4,-.08);
+
+  f.userData.name=name;
+  friends.push(f);
+}
+friend(8,5,"Bia",0xe65c8c);
+friend(-9,-5,"Ravi",0x2789cf);
+friend(5,-13,"Theo",0x38a77c);
+
+// MEDALHAS
+const medals=[];
+for(let i=0;i<5;i++){
+  const medal=new THREE.Mesh(
+    new THREE.TorusGeometry(.45,.13,12,32),
+    new THREE.MeshStandardMaterial({
+      color:0xffd32a,metalness:.7,roughness:.25
+    })
+  );
+  const a=i*1.25;
+  medal.position.set(Math.cos(a)*13,2.3,Math.sin(a)*13);
+  medal.rotation.x=Math.PI/2;
+  scene.add(medal);
+  medals.push(medal);
+}
+
+// CONTROLES
+const keys={};
+window.addEventListener("keydown",e=>keys[e.key]=true);
+window.addEventListener("keyup",e=>keys[e.key]=false);
+
+document.querySelectorAll("[data-key]").forEach(btn=>{
+  const key=btn.dataset.key;
+  btn.addEventListener("pointerdown",e=>{
+    e.preventDefault();keys[key]=true;
+  });
+  ["pointerup","pointerleave","pointercancel"].forEach(ev=>{
+    btn.addEventListener(ev,()=>keys[key]=false);
+  });
+});
+
+let jumping=false;
+let velocity=0;
+let score=0;
+let walking=0;
+
+document.getElementById("jump").onclick=()=>{
+  if(!jumping){
+    jumping=true;
+    velocity=.22;
+  }
+};
+
+document.getElementById("talk").onclick=()=>{
+  let nearest=null;
+  let dist=5;
+  friends.forEach(f=>{
+    const d=luna.position.distanceTo(f.position);
+    if(d<dist){dist=d;nearest=f;}
+  });
+
+  const message=document.getElementById("message");
+  if(nearest){
+    message.innerHTML=
+      "👋 Olá! Eu sou "+nearest.userData.name+
+      "! Vamos conversar em Libras!<br>LIBRAS + PORTUGUÊS";
+  }else{
+    message.innerHTML=
+      "🌺 Aproxime-se de um amigo para conversar!";
+  }
+};
+
+// CÂMERA E MOVIMENTAÇÃO
+const clock=new THREE.Clock();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const t=clock.getElapsedTime();
+
+  const dx=(keys.ArrowRight||keys.d?1:0)-
+           (keys.ArrowLeft||keys.a?1:0);
+  const dz=(keys.ArrowDown||keys.s?1:0)-
+           (keys.ArrowUp||keys.w?1:0);
+
+  if(dx||dz){
+    const direction=new THREE.Vector3(dx,0,dz).normalize();
+    luna.position.addScaledVector(direction,.12);
+    luna.rotation.y=Math.atan2(direction.x,direction.z);
+    walking+=.16;
+    legs[0].rotation.x=Math.sin(walking)*.55;
+    legs[1].rotation.x=-Math.sin(walking)*.55;
+    arms[0].rotation.x=-Math.sin(walking)*.3;
+    arms[1].rotation.x=Math.sin(walking)*.3;
+  }else{
+    legs.forEach(l=>l.rotation.x=0);
+  }
+
+  // Limite da ilha
+  const distance=Math.hypot(luna.position.x,luna.position.z);
+  if(distance>31.5){
+    luna.position.x*=31.5/distance;
+    luna.position.z*=31.5/distance;
+  }
+
+  // PULO
+  if(jumping){
+    luna.position.y+=velocity;
+    velocity-=.012;
+    if(luna.position.y<=0){
+      luna.position.y=0;
+      jumping=false;
+      velocity=0;
+    }
+  }
+
+  // Medalhas
+  medals.forEach((m,i)=>{
+    m.rotation.z=t;
+    m.position.y=2.3+Math.sin(t*2+i)*.2;
+    if(luna.position.distanceTo(m.position)<1.5){
+      scene.remove(m);
+      medals[i]=null;
+      score++;
+      document.getElementById("score").textContent=
+        "⭐ Medalhas: "+score;
+      document.getElementById("message").innerHTML=
+        "🏅 Parabéns, Luna! Você encontrou uma medalha!";
+    }
+  });
+
+  // Câmera acompanha Luna
+  const target=new THREE.Vector3(
+    luna.position.x,
+    luna.position.y+3,
+    luna.position.z
+  );
+  const desired=new THREE.Vector3(
+    luna.position.x,
+    luna.position.y+7,
+    luna.position.z+12
+  );
+  camera.position.lerp(desired,.08);
+  camera.lookAt(target);
+
+  renderer.render(scene,camera);
+}
+
+camera.position.set(0,9,14);
+animate();
+
+window.addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
